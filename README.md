@@ -27,19 +27,9 @@ This project represents the frontend part of the application with the following 
    cd frontend-module
    ```
 
-3. Install dependencies:
-   ```sh
-   npm install
-   ```
-
 ## Usage
 
-1. Start the development server:
-   ```sh
-   npm start
-   ```
-
-2. Open your browser and go to `http://localhost:3000`.
+1. Open the `index.html` file in your browser.
 
 ## Examples
 
