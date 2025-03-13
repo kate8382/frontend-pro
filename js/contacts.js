@@ -12,13 +12,7 @@ export function setupContactInputHandler(formContacts) {
     if (e.target.classList.contains('input-contacts')) {
       const contactDiv = e.target.closest('.contact-div');
       const deleteBtn = contactDiv.querySelector('.delete-contact');
-      if (e.target.value.trim() !== '') {
-        deleteBtn.style.display = 'flex';
-        e.target.classList.remove('full-width');
-      } else {
-        deleteBtn.style.display = 'none';
-        e.target.classList.add('full-width');
-      }
+      toggleDeleteButton(e.target, deleteBtn);
     }
   });
 }
@@ -174,7 +168,15 @@ export function clearErrorOnInput() {
     }
   });
 
-  if (allValid && errorElement) {
+  if (allValid) {
+    removeErrorMessage();
+  }
+}
+
+// Функция для удаления сообщения об ошибке
+export function removeErrorMessage() {
+  const errorElement = document.querySelector('.error-message');
+  if (errorElement) {
     errorElement.remove();
-  };
+  }
 }

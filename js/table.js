@@ -1,7 +1,4 @@
-import { openEditModal, setClientToDelete } from './modal.js';
-
-let isEditing = false;
-let editingClientId = null;
+import { openEditModal, setClientToDelete, state } from './modal.js';
 
 const contactTypeTranslations = {
   'Telephone': 'Телефон',
@@ -47,8 +44,8 @@ export function getClientItem(clientObj, elements, clientsList, renderClientsTab
   btnEdit.innerHTML = `<img class="img-reset pencil-icon" src="./img/pencil.svg" aria-hidden="true" alt="Карандаш">Изменить`;
   btnEdit.addEventListener('click', async (e) => {
     e.preventDefault();
-    isEditing = true;
-    editingClientId = clientObj.id;
+    state.isEditing = true;
+    state.editingClientId = clientObj.id;
 
     // Заменить иконку карандаша на значок загрузки
     const originalIcon = btnEdit.querySelector('.pencil-icon');

@@ -1,15 +1,18 @@
 import { deleteClientServer, updateClientServer, addClientServer, getClientsServer } from './api.js';
 import { checkFirstLetter, formatID } from './table.js';
-import { addContactHandler, toggleDeleteButton, setupAddContactHandler, applySelectStyles, validateContacts, showError, setupContactInputHandler, clearErrorOnInput } from './contacts.js';
+import { addContactHandler, toggleDeleteButton, setupAddContactHandler, applySelectStyles, validateContacts, showError, setupContactInputHandler, clearErrorOnInput, removeErrorMessage } from './contacts.js';
 
-let isEditing = false;
-let editingClientId = null;
-let originalCreatedAt = null;
-let clientToDelete = null;
+// Флаги как обьект состояния
+export const state = {
+  isEditing: false,
+  editingClientId: null,
+  originalCreatedAt: null,
+  clientToDelete: null
+};
 
 // Установка клиента для удаления
 export function setClientToDelete(id) {
-  clientToDelete = id;
+  state.clientToDelete = id;
 }
 
 export function initializeModalElements() {
@@ -68,9 +71,9 @@ export function setupModalEventListeners(elements, clientsList, renderClientsTab
   // Открытие модального окна для нового клиента
   document.getElementById('main-btn').addEventListener('click', () => {
     modalElement.style.display = 'flex';
-    isEditing = false;
-    editingClientId = null;
-    originalCreatedAt = null; // Сброс оригинальной даты создания
+    state.isEditing = false;
+    state.editingClientId = null;
+    state.originalCreatedAt = null; // Сброс оригинальной даты создания
     form.reset();
 
     // Очистка плейсхолдеров перед применением
@@ -90,6 +93,9 @@ export function setupModalEventListeners(elements, clientsList, renderClientsTab
     });
     saveBtn.disabled = false;
     document.querySelector('.modal__title').textContent = 'Новый клиент';
+
+    // Удаление сообщения об ошибке при открытии модального окна
+    removeErrorMessage();
 
     // Установить надпись и поведение кнопки cancelBtn для нового клиента
     cancelBtn.textContent = 'Отмена';
@@ -123,14 +129,14 @@ export function setupModalEventListeners(elements, clientsList, renderClientsTab
   confirmDeleteBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     try {
-      const clientExists = clientsList.some(client => client.id === clientToDelete);
+      const clientExists = clientsList.some(client => client.id === state.clientToDelete);
       if (!clientExists) {
         throw new Error('Client not found');
       }
-      await deleteClientServer(clientToDelete);
-      clientsList = clientsList.filter(client => client.id !== clientToDelete);
+      await deleteClientServer(state.clientToDelete);
+      clientsList = clientsList.filter(client => client.id !== state.clientToDelete);
       renderClientsTable(clientsList, filterInp, getClientItem, sortClientsTable, switchSort, elements, clientsList);
-      clientToDelete = null;
+      state.clientToDelete = null;
       deleteModal.style.display = 'none';
       window.location.hash = ''; // Удаляем hash-часть URL при закрытии модального окна
     } catch (error) {
@@ -139,7 +145,7 @@ export function setupModalEventListeners(elements, clientsList, renderClientsTab
   });
 
   cancelDeleteBtn.addEventListener('click', () => {
-    clientToDelete = null;
+    state.clientToDelete = null;
     deleteModal.style.display = 'none';
   });
 
@@ -174,15 +180,9 @@ export function setupModalEventListeners(elements, clientsList, renderClientsTab
   saveBtn.addEventListener('click', async (e) => {
     e.preventDefault();
 
-    // Проверка валидности формы
-    if (!form.checkValidity()) {
+    // Проверка валидности формы и контактов
+    if (!form.checkValidity() || !validateContacts(formContacts)) {
       form.reportValidity();
-      return;
-    }
-
-    // Проверка валидности контактов
-    const isContactsValid = validateContacts(formContacts);
-    if (!isContactsValid) {
       showError('Ошибка: новая модель организационной деятельности предполагает независимые способы реализации поставленных обществом задач!');
       return;
     }
@@ -193,7 +193,7 @@ export function setupModalEventListeners(elements, clientsList, renderClientsTab
     form.style.pointerEvents = 'none'; // Блокируем форму и форму контактов
     // Сохранение изменений или добавление нового клиента
     setTimeout(async () => {
-      if (isEditing) {
+      if (state.isEditing) {
         await saveClientChanges(elements, clientsList, renderClientsTable, filterInp, getClientItem, sortClientsTable, switchSort);
       } else {
         await addNewClient(elements, clientsList, renderClientsTable, filterInp, getClientItem, sortClientsTable, switchSort);
@@ -259,7 +259,7 @@ async function saveClientChanges(elements, clientsList, renderClientsTable, filt
     formContacts
   } = elements;
 
-  if (!editingClientId) {
+  if (!state.editingClientId) {
     console.error('Editing client ID is null or undefined');
     return;
   }
@@ -284,8 +284,8 @@ async function saveClientChanges(elements, clientsList, renderClientsTable, filt
   });
 
   try {
-    const updatedClientFromServer = await updateClientServer(editingClientId, updatedClient);
-    const clientIndex = clientsList.findIndex(client => client.id === editingClientId);
+    const updatedClientFromServer = await updateClientServer(state.editingClientId, updatedClient);
+    const clientIndex = clientsList.findIndex(client => client.id === state.editingClientId);
     if (clientIndex !== -1) {
       clientsList[clientIndex] = updatedClientFromServer;
     }
@@ -317,8 +317,8 @@ export async function openEditModal(clientObj, elements, clientsList, renderClie
     surnameInp.value = checkFirstLetter(client.surname);
     nameInp.value = checkFirstLetter(client.name);
     lastnameInp.value = checkFirstLetter(client.lastName);
-    originalCreatedAt = client.createdAt; // Сохраняем оригинальную дату создания
-    editingClientId = client.id; // Устанавливаем идентификатор редактируемого клиента
+    state.originalCreatedAt = client.createdAt; // Сохраняем оригинальную дату создания
+    state.editingClientId = client.id; // Устанавливаем идентификатор редактируемого клиента
 
     Array.from(formContacts.children).forEach(child => {
       if (child !== btnAddContact) {
@@ -386,13 +386,13 @@ export async function openEditModal(clientObj, elements, clientsList, renderClie
     movePlaceholderAbove(lastnameInp, 'Отчество');
 
     // Установить переменную isEditing в true
-    isEditing = true;
+    state.isEditing = true;
 
     // Изменение поведения кнопки cancel только при редактировании
     cancelBtn.textContent = 'Удалить клиента';
     cancelBtn.onclick = (e) => {
       e.preventDefault();
-      clientToDelete = client.id;
+      state.clientToDelete = client.id;
       deleteModal.style.display = 'flex'; // Показать модальное окно подтверждения удаления
     };
 
