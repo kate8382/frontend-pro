@@ -1,7 +1,8 @@
 /* eslint-disable no-console */
 // импорт стандартных библиотек Node.js
-const { existsSync, readFileSync, writeFileSync } = require('fs');
+const { existsSync, readFileSync, writeFileSync, statSync } = require('fs'); // импортируем функции для работы с файловой системой
 const { createServer } = require('http');
+const path = require('path'); // Добавьте этот импорт
 
 // файл для базы данных
 const DB_FILE = process.env.DB_FILE || './db.json';
@@ -85,15 +86,38 @@ function getClientList(params = {}) {
   if (params.search) {
     const search = params.search.trim().toLowerCase();
     return clients.filter(client => [
-        client.name,
-        client.surname,
-        client.lastName,
-        ...client.contacts.map(({ value }) => value)
-      ]
-        .some(str => str.toLowerCase().includes(search))
+      client.name,
+      client.surname,
+      client.lastName,
+      ...client.contacts.map(({ value }) => value)
+    ]
+      .some(str => str.toLowerCase().includes(search))
     );
   }
   return clients;
+}
+
+/**
+ * Возвращает список автозаполнения клиентов по запросу
+ * @param {string} query - Поисковая строка
+ * @returns {{ id: string, name: string, surname: string, lastName: string }[]} Массив клиентов для автозаполнения
+ */
+// функция для автозаполнения
+function getAutocompleteItems(query) {
+  const clients = getClientList(); // получаем список клиентов
+  // если не передан запрос, то возвращаем пустой массив
+  const search = query.trim().toLowerCase();
+  return clients
+    .filter(client => // проверяем, что хотя бы одно из полей клиента содержит искомую строку
+      [client.name, client.surname, client.lastName]
+        .some(str => str.toLowerCase().includes(search)) // проверяем, что строка из поля клиента содержит искомую строку
+    )
+    .map(client => ({ // возвращаем массив объектов с id, name, surname и lastName
+      id: client.id,
+      name: client.name,
+      surname: client.surname,
+      lastName: client.lastName,
+    }));
 }
 
 /**
@@ -177,11 +201,42 @@ module.exports = createServer(async (req, res) => {
     return;
   }
 
-  // если URI не начинается с нужного префикса - можем сразу отдать 404
-  if (!req.url || !req.url.startsWith(URI_PREFIX)) {
-    res.statusCode = 404;
-    res.end(JSON.stringify({ message: 'Not Found' }));
+  // обработка статических файлов
+  const staticFilePath = path.join(__dirname, '../frontend', req.url); // путь к статическому файлу
+  // проверяем, что файл существует и не является директорией
+  if (existsSync(staticFilePath) && req.method === 'GET' && !statSync(staticFilePath).isDirectory()) { // проверяем, что файл существует и не является директорией
+    // если файл существует, то читаем его и отправляем в ответе
+    const ext = path.extname(staticFilePath).toLowerCase(); // получаем расширение файла
+    // устанавливаем соответствующий заголовок Content-Type (например, для .html - text/html, для .css - text/css и т.д.)
+    const contentType = {
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.js': 'application/javascript',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.svg': 'image/svg+xml',
+      '.json': 'application/json',
+    }[ext] || 'application/octet-stream'; // универсальный тип, который подходит для всех типов файлов
+
+    res.setHeader('Content-Type', contentType); // устанавливаем заголовок Content-Type в зависимости от расширения файла
+    res.end(readFileSync(staticFilePath)); // читаем файл и отправляем его в ответе
     return;
+  }
+
+  // если URI не начинается с нужного префикса - можем сразу отдать 404
+  if (!req.url || !req.url.startsWith(URI_PREFIX)) { // проверяем, что URI начинается с нужного префикса
+    if (req.url === '/') { // если URI равен /, то возвращаем HTML файл по умолчанию
+      // Возвращаем HTML файл по умолчанию
+      const htmlFilePath = path.join(__dirname, '../frontend/index.html'); // путь к HTML файлу
+      const htmlContent = readFileSync(htmlFilePath, 'utf8'); // читаем HTML файл
+      res.setHeader('Content-Type', 'text/html'); // устанавливаем заголовок Content-Type в text/html
+      res.end(htmlContent); // отправляем HTML файл в ответе
+      return;
+    } else {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ message: 'Not Found' }));
+      return;
+    }
   }
 
   // убираем из запроса префикс URI, разбиваем его на путь и параметры
@@ -210,17 +265,46 @@ module.exports = createServer(async (req, res) => {
           res.setHeader('Location', `${URI_PREFIX}/${createdItem.id}`);
           return createdItem;
         }
+      } else if (uri === '/autocomplete') { // если URI равен /api/clients/autocomplete
+        if (req.method === 'GET') { // если метод GET
+          // получаем список автозаполнения клиентов по запросу
+          // queryParams - объект с параметрами запроса
+          const { query } = queryParams;
+          return getAutocompleteItems(query);
+        }
+      } else if (uri.startsWith('/#')) { // если URI начинается с /#
+        // /#id клиента
+        const itemId = uri.substr(2); // Удаляем символ # из URI
+        if (req.method === 'GET') { // если метод GET
+          // Получаем клиента по его ID
+          const client = getClient(itemId);
+          const htmlFilePath = path.join(__dirname, '../frontend/index.html'); // путь к HTML файлу
+          let htmlContent = readFileSync(htmlFilePath, 'utf8'); // читаем HTML файл
+          // Добавляем скрипт для открытия модального окна с данными клиента
+          const script = `<script>
+            document.addEventListener('DOMContentLoaded', () => {
+              const client = ${JSON.stringify(client)};
+              openEditModal(client, elements, clientsList, renderClientsTable, filterInp, getClientItem, sortClientsTable, switchSort);
+            });
+          </script>`;
+          htmlContent = htmlContent.replace('</body>', `${script}</body>`); // добавляем скрипт в конец HTML файла
+          res.setHeader('Content-Type', 'text/html'); // устанавливаем заголовок Content-Type в text/html
+          res.end(htmlContent); // отправляем HTML файл в ответе
+          return;
+        }
       } else {
         // /api/clients/{id}
         // параметр {id} из URI запроса
         const itemId = uri.substr(1);
         if (req.method === 'GET') return getClient(itemId);
-        if (req.method === 'PATCH') return updateClient(itemId, await drainJson(req));
+        if (req.method === 'PATCH') return updateClient(itemId, await drainJson(req)); // обновляем клиента
         if (req.method === 'DELETE') return deleteClient(itemId);
       }
       return null;
     })();
-    res.end(JSON.stringify(body));
+    if (body) { // если тело ответа не пустое, то отправляем его
+      res.end(JSON.stringify(body));
+    }
   } catch (err) {
     // обрабатываем сгенерированную нами же ошибку
     if (err instanceof ApiError) {
@@ -247,6 +331,8 @@ module.exports = createServer(async (req, res) => {
       console.log(`PATCH ${URI_PREFIX}/{id} - изменить клиента с ID, в теле запроса нужно передать объект { name?: string, surname?: string, lastName?: string, contacts?: object[] }`);
       console.log(`\tcontacts - массив объектов контактов вида { type: string, value: string }`);
       console.log(`DELETE ${URI_PREFIX}/{id} - удалить клиента по ID`);
+      console.log(`GET ${URI_PREFIX}/autocomplete?query={query} - получить список автозаполнения клиентов по запросу`);
+      console.log(`GET /#id клиента - получить клиента по его ID из hash-части URL`);
     }
   })
   // ...и вызываем запуск сервера на указанном порту
