@@ -43,7 +43,7 @@ This project is the final work for the JavaScript "Basic Level" course at Skillb
 
 1. Clone the repository:
    ```sh
-   git clone https://github.com/EkaterinaSevciuc/frontend-pro.git
+   git clone git@github.com:kate8382/frontend-pro.git
    ```
 
 2. Navigate to the project directory:
