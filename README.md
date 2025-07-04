@@ -1,5 +1,8 @@
 # Frontend Pro
 
+**Demo:**  
+View the application: [Frontend Demo](https://kate8382.github.io/frontend-module/)
+
 ## Description
 
 This project represents the main repository, which includes the `crm-backend` folder and the `frontend-module` submodule. The main repository contains the overall project structure and installation and usage instructions.
